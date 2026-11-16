@@ -1,0 +1,11 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 30px;
+}
+nav { margin-bottom: 24px; }
+input, button { padding: 7px; }
+button { margin-left: 6px; cursor: pointer; }
+ul { padding-left: 0; list-style: none; }
+li { margin: 12px 0; }
+li label { margin-right: 12px; overflow-wrap: anywhere; }
+s { color: #666; }

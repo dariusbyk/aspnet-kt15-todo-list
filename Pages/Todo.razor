@@ -1,0 +1,163 @@
+@page "/"
+@page "/todo"
+@using System.Text.Json
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Components.Forms
+@inject IJSRuntime JS
+
+<PageTitle>Список задач</PageTitle>
+<h1>Список задач</h1>
+
+<p><button @onclick="ExportTasks">Скачать задачи в JSON</button></p>
+<p>
+    <label>Загрузить задачи из JSON:
+        <InputFile OnChange="ImportTasks" accept=".json,application/json" />
+    </label>
+</p>
+<p>Загрузка файла заменяет текущий список. Перед закрытием страницы скачайте задачи.</p>
+@if (!string.IsNullOrEmpty(message))
+{
+    <p>@message</p>
+}
+
+    <form @onsubmit="AddTask" @onsubmit:preventDefault="true">
+        <input aria-label="Новая задача" @bind="newTask" @bind:event="oninput" placeholder="Новая задача" />
+        <button type="submit">Добавить</button>
+    </form>
+
+    @if (tasks.Count == 0)
+    {
+        <p>Список задач пуст.</p>
+    }
+
+    <ul>
+        @foreach (TaskItem task in tasks)
+        {
+            <li @key="task">
+                @if (editingTask == task)
+                {
+                    <input aria-label="Название задачи" @bind="editedName" @bind:event="oninput" />
+                    <button @onclick="SaveEdit">Сохранить</button>
+                    <button @onclick="CancelEdit">Отмена</button>
+                }
+                else
+                {
+                    <label>
+                        <input type="checkbox" checked="@task.IsComplete" @onchange="() => ToggleTaskCompletion(task)" />
+                        @if (task.IsComplete)
+                        {
+                            <s>@task.Name</s>
+                        }
+                        else
+                        {
+                            <span>@task.Name</span>
+                        }
+                    </label>
+                    <button @onclick="() => StartEdit(task)">Изменить</button>
+                    <button @onclick="() => DeleteTask(task)">Удалить</button>
+                }
+            </li>
+        }
+    </ul>
+
+@code {
+    private List<TaskItem> tasks = new List<TaskItem>();
+    private string newTask = string.Empty;
+    private TaskItem editingTask;
+    private string editedName = string.Empty;
+    private string message = string.Empty;
+
+    private async Task ExportTasks()
+    {
+        JsonSerializerOptions options = new JsonSerializerOptions();
+        options.WriteIndented = true;
+        options.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+        string json = JsonSerializer.Serialize(tasks, options);
+        await JS.InvokeVoidAsync("todoFiles.download", json);
+    }
+
+    private async Task ImportTasks(InputFileChangeEventArgs e)
+    {
+        message = string.Empty;
+        try
+        {
+            using (Stream stream = e.File.OpenReadStream(5 * 1024 * 1024))
+            {
+                List<TaskItem> loadedTasks = await JsonSerializer.DeserializeAsync<List<TaskItem>>(stream);
+                if (loadedTasks == null)
+                {
+                    message = "В файле должен быть список задач.";
+                    return;
+                }
+                foreach (TaskItem task in loadedTasks)
+                {
+                    if (task == null || string.IsNullOrWhiteSpace(task.Name))
+                    {
+                        message = "У каждой задачи должно быть название.";
+                        return;
+                    }
+                }
+                tasks = loadedTasks;
+                CancelEdit();
+                newTask = string.Empty;
+                message = "Задачи загружены.";
+            }
+        }
+        catch (JsonException)
+        {
+            message = "Не удалось прочитать JSON со списком задач.";
+        }
+        catch (IOException)
+        {
+            message = "Не удалось прочитать файл. Максимальный размер — 5 МБ.";
+        }
+    }
+
+    private void AddTask()
+    {
+        if (string.IsNullOrWhiteSpace(newTask))
+        {
+            return;
+        }
+
+        TaskItem task = new TaskItem();
+        task.Name = newTask.Trim();
+        task.IsComplete = false;
+        tasks.Add(task);
+        newTask = string.Empty;
+    }
+
+    private void ToggleTaskCompletion(TaskItem task)
+    {
+        task.IsComplete = !task.IsComplete;
+    }
+
+    private void DeleteTask(TaskItem task)
+    {
+        tasks.Remove(task);
+    }
+
+    private void StartEdit(TaskItem task)
+    {
+        editingTask = task;
+        editedName = task.Name;
+    }
+
+    private void SaveEdit()
+    {
+        if (string.IsNullOrWhiteSpace(editedName))
+        {
+            return;
+        }
+
+        editingTask.Name = editedName.Trim();
+        editingTask = null;
+        editedName = string.Empty;
+    }
+
+    private void CancelEdit()
+    {
+        editingTask = null;
+        editedName = string.Empty;
+    }
+}
